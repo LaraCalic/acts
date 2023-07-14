@@ -6,6 +6,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+
+
 #pragma once
 // acts/Core/include/Acts/Detector/Detector.hpp
 #include "Acts/Definitions/Algebra.hpp"
@@ -134,6 +136,10 @@ class Detector : public std::enable_shared_from_this<Detector> {
   void setCorrelatedMisalignment(double correlatedMisalignmentX, double correlatedMisalignmentY);
   std::pair<double, double> getCorrelatedMisalignment() const;
 
+  // Add functions to set and retrieve misalignment information for superstructures
+  void setSuperstructureMisalignment(const std::string& superstructureName, double misalignmentX, double misalignmentY);
+  std::pair<double, double> getSuperstructureMisalignment(const std::string& superstructureName) const;
+
  private:
   /// Name of the detector
   std::string m_name;
@@ -149,7 +155,68 @@ class Detector : public std::enable_shared_from_this<Detector> {
 
   /// Name/index map to find volumes by name and detect duplicates
   std::unordered_map<std::string, size_t> m_volumeNameIndex;
+
+  /// Sensor misalignment information
+  std::unordered_map<std::string, std::pair<double, double>> m_sensorMisalignment;
+
+  /// Correlated misalignment information
+  std::pair<double, double> m_correlatedMisalignment;
+
+  /// superstructure misalignments
+  std::unordered_map<std::string, std::pair<double, double>> m_superstructureMisalignments;
 };
 
+inline void Detector::setSensorMisalignment(const std::string& sensorName, double misalignmentX, double misalignmentY) {
+  // for the given sensor set misalignment
+  m_sensorMisalignment[sensorName] = std::make_pair(misalignmentX, misalignmentY);
 }
+
+inline std::pair<double, double> Detector::getSensorMisalignment(const std::string& sensorName) const {
+  // for the given sensor, try to retrive misalignment
+  auto it = m_sensorMisalignment.find(sensorName);
+  if (it != m_sensorMisalignment.end()) {
+    return it->second;
+  } else {
+    // in the case if the sensor misalignment is not found
+    throw std::runtime_error("Misalignment information not available for sensor: " + sensorName);
+  }
 }
+
+inline void Detector::setCorrelatedMisalignment(double correlatedMisalignmentX, double correlatedMisalignmentY) {
+  //  for all sensors, we're setting the correlated misalignment 
+  for (auto& sensorMisalignment : m_sensorMisalignment) {
+    sensorMisalignment.second = std::make_pair(correlatedMisalignmentX, correlatedMisalignmentY);
+  }
+}
+
+inline std::pair<double, double> Detector::getCorrelatedMisalignment() const {
+  // assumption: all sensors have the same correlated misalignment
+  // --> so we can retrieve the misalignment (from any sensor that we want)
+  if (!m_sensorMisalignment.empty()) {
+    //first sensor --> retrieve the misalignment
+    const auto& firstSensorMisalignment = m_sensorMisalignment.begin()->second;
+    return firstSensorMisalignment;
+  } else {
+    // if sensors can't be find, return default values 
+    return std::make_pair(0.0, 0.0);
+  }
+}
+
+inline void Detector::setSuperstructureMisalignment(const std::string& superstructureName, double misalignmentX, double misalignmentY) {
+  // for 'specific' suprestructures -->  set the misalignment 
+  m_superstructureMisalignments[superstructureName] = std::make_pair(misalignmentX, misalignmentY);
+}
+
+inline std::pair<double, double> Detector::getSuperstructureMisalignment(const std::string& superstructureName) const {
+  //for 'specificä superstructure --->  retrieve the misalignment 
+  auto it = m_superstructureMisalignments.find(superstructureName);
+  if (it != m_superstructureMisalignments.end()) {
+    return it->second;
+  } else {
+    // in the case if superstructure misalignment is not found
+    throw std::runtime_error("Misalignment information not available for superstructure: " + superstructureName);
+  }
+}
+
+}  // namespace Experimental
+}  // namespace Acts

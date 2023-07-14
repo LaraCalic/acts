@@ -17,6 +17,10 @@
 #include "ActsExamples/EventData/ProtoTrack.hpp"
 #include "ActsExamples/EventData/Trajectories.hpp"
 #include "ActsExamples/Framework/WhiteBoard.hpp"
+#include "Acts/Definitions/Algebra.hpp"
+#include "ActsAlignment/Kernel/detail/AlignmentEngine.hpp"
+#include "Detector.hpp" 
+
 
 ActsExamples::AlignmentAlgorithm::AlignmentAlgorithm(Config cfg,
                                                      Acts::Logging::Level lvl)
@@ -118,7 +122,7 @@ ActsExamples::ProcessCode ActsExamples::AlignmentAlgorithm::execute(
   TrackFitterOptions kfOptions(ctx.geoContext, ctx.magFieldContext,
                                ctx.calibContext, extensionsContinuing from the previous code snippet:
 
-```cpp
+
       Acts::PropagatorPlainOptions(), &(*pSurface));
 
   // Set the alignment options
@@ -155,5 +159,33 @@ auto result = (*m_cfg.align)(sourceLinkTrackContainer, initialParameters,
 
   // Add alignment parameters to the event store
   m_outputAlignmentParameters(ctx, std::move(alignedParameters));
-  return ActsExamples::ProcessCode::SUCCESS;
+ 
+void resetMisalignmentDerivative(Acts::AlignmentToBoundMatrix& alignToBound,
+                                 AlignmentMask mask,
+                                 const Acts::Experimental::Detector& detector) {
+  // Reuse the existing code to reset the alignment derivatives
+  ActsAlignment::detail::resetAlignmentDerivative(alignToBound, mask);
+  
+  // sensors -->  set the correlated misalignment 
+  if (ACTS_CHECK_BIT(mask, AlignmentMask::Misalignment)) {
+    alignToBound.col(Acts::eMisalignmentX) = detector.getCorrelatedMisalignment().first;
+    alignToBound.col(Acts::eMisalignmentY) = detector.getCorrelatedMisalignment().second;
+  }
+
+  // superstructures --> set selective misalignment 
+  if (ACTS_CHECK_BIT(mask, AlignmentMask::SuperstructureMisalignment)) {
+    for (const auto& superstructure : detector.getSuperstructures()) {
+      const auto& misalignment = detector.getSuperstructureMisalignment(superstructure);
+      for (const auto& sensor : superstructure.getSensors()) {
+        alignToBound(sensor.getAlignmentIndex(Acts::eMisalignmentX)) = misalignment.first;
+        alignToBound(sensor.getAlignmentIndex(Acts::eMisalignmentY)) = misalignment.second;
+      }
+    }
+  }
+}
+
+}  // namespace detail
+}  // namespace ActsMisalignment
+
+ return ActsExamples::ProcessCode::SUCCESS;
 }

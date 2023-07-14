@@ -7,21 +7,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include "ActsExamples/ContextualDetector/InternalAlignmentDecorator.hpp"
-
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
 #include "ActsExamples/ContextualDetector/InternallyAlignedDetectorElement.hpp"
 #include "ActsExamples/Framework/AlgorithmContext.hpp"
 #include "ActsExamples/Framework/RandomNumbers.hpp"
+#include <algorithm> // For std::find
 
-#include <ostream>
-#include <thread>
-#include <utility>
-
-ActsExamples::Contextual::InternalAlignmentDecorator::
-    InternalAlignmentDecorator(const Config& cfg,
-                               std::unique_ptr<const Acts::Logger> logger)
-    : m_cfg(cfg), m_logger(std::move(logger)) {}
+// acts/Examples/Detectors/ContextualDetector/src/InternalAlignmentDecorator.cpp
 
 ActsExamples::ProcessCode
 ActsExamples::Contextual::InternalAlignmentDecorator::decorate(
@@ -53,18 +46,33 @@ ActsExamples::Contextual::InternalAlignmentDecorator::decorate(
                               << context.eventNumber
                               << ", emulate new alignment.");
 
-      // Create an algorithm local random number generator
+      //algorithm local random number generator
       RandomEngine rng = m_cfg.randomNumberSvc->spawnGenerator(context);
 
       for (auto& lstore : m_cfg.detectorStore) {
         for (auto& ldet : lstore) {
-          // get the nominal transform
-          Acts::Transform3 tForm =
-              ldet->nominalTransform(context.geoContext);  // copy
-          // create a new transform
-          applyTransform(tForm, m_cfg, rng, iov);
-          // put it back into the store
-          ldet->addAlignedTransform(tForm, iov);
+          // if the current superstructure in the list of selected ones?
+          if (std::find(m_cfg.selectedSuperstructures.begin(), m_cfg.selectedSuperstructures.end(), ldet->superstructureId) != m_cfg.selectedSuperstructures.end()) {
+            // get the nominal transform
+            Acts::Transform3 tForm =
+                ldet->nominalTransform(context.geoContext);  // copy
+            // create a new transform
+            applyTransform(tForm, m_cfg, rng, iov);
+
+            // for each, individual sensor, generate the correleted misalignment 
+            auto misalignments = generateCorrelatedMisalignments(
+                m_cfg.sigmaInPlane, m_cfg.sigmaOutPlane, m_cfg.sigmaInRot,
+                m_cfg.sigmaOutRot, rng);
+
+            // applying misalignments to the transform
+            applyMisalignment(tForm, std::get<0>(misalignments),
+                              std::get<1>(misalignments),
+                              std::get<2>(misalignments),
+                              std::get<3>(misalignments));
+
+            // puting back transformed alignment back into the store
+            ldet->addAlignedTransform(tForm, iov);
+          }
         }
       }
     }

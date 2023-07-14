@@ -7,6 +7,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // acts/Alignment/include/ActsAlignment/Kernel/AlignmentError.hpp
 
+
 #pragma once
 
 #include <iostream>
@@ -58,6 +59,8 @@ struct MisalignmentParameters {
   Acts::RotationMatrix3 rotation;
 };
 
+
+
 template <typename fitter_t>
 template <typename trajectory_container_t,
           typename start_parameters_container_t, typename fit_options_t>
@@ -69,7 +72,7 @@ ActsAlignment::Alignment<fitter_t>::align(
   // Construct an AlignmentResult object
   AlignmentResult alignResult;
 
-  // Assign index to the alignable surface
+  //  if the alignable surface is alignable, assing the index
   for (unsigned int iDetElement = 0;
        iDetElement < alignOptions.alignedDetElements.size(); iDetElement++) {
     alignResult.idxedAlignSurfaces.emplace(
@@ -151,13 +154,15 @@ ActsAlignment::Alignment<fitter_t>::align(
     alignResult.result = AlignmentError::ConvergeFailure;
   }
 
-  // Apply correlated misalignments to the sensors
-  if (alignmentParametersUpdated) {
-    for (const auto& [surface, index] : alignResult.idxedAlignSurfaces) {
-      const MisalignmentParameters& misalignmentParams =
-          alignOptions.misalignmentParameters.at(index);
+  // loop over sensors and apply correlted misalignments
+if (alignmentParametersUpdated) {
+  for (const auto& [surface, index] : alignResult.idxedAlignSurfaces) {
+    const MisalignmentParameters& misalignmentParams =
+        alignOptions.misalignmentParameters.at(index);
 
-      // Calculate the correlated misalignment parameters
+    // this is the part where we are check if the surface belongs to the superstructures
+    if (alignOptions.selectedSuperstructures.count(surface) > 0) {
+      // calculation of the correlated misalignment parameters
       Acts::AlignmentVector correlatedMisalignmentParams =
           Acts::AlignmentVector::Zero();
       correlatedMisalignmentParams.segment<3>(Acts::eAlignmentCenter0) =
@@ -165,20 +170,19 @@ ActsAlignment::Alignment<fitter_t>::align(
       correlatedMisalignmentParams.segment<3>(Acts::eAlignmentRotation0) =
           misalignmentParams.rotation.eulerAngles(2, 1, 0);
 
+      // for each surface apply misalignment parameters
+      surface->setMisalignmentParameters(correlatedMisalignmentParams);
 
-// Set the updated transform for the sensor
-sensor->setTransform(updatedTransform);
-
-ACTS_VERBOSE("Sensor with surface " << surface->geometryId()
-                                    << " has aligned geometry position as below:");
-ACTS_VERBOSE("Center (cenX, cenY, cenZ) = " << correlatedTranslation.transpose());
-ACTS_VERBOSE("Euler angles (rotZ, rotY, rotX) = " << correlatedMisalignmentParams.transpose());
-ACTS_VERBOSE("Rotation matrix = \n" << correlatedRotation);
-} // end of for loop for sensors
+      ACTS_VERBOSE("Surface with geometryId " << surface->geometryId()
+                                              << " has applied misalignment parameters:");
+      ACTS_VERBOSE("Translation (tx, ty, tz) = "
+                   << misalignmentParams.translation.transpose());
+      ACTS_VERBOSE("Euler angles (rotZ, rotY, rotX) = "
+                   << misalignmentParams.rotation.eulerAngles(2, 1, 0));
+    }
+  }
 } else {
-ACTS_DEBUG("Alignment parameters are not updated.");
+  ACTS_DEBUG("Alignment parameters are not updated.");
 }
 
 return alignResult;
-} // end of align function
-} // namespace ActsAlignment

@@ -20,7 +20,8 @@
 #include "TH1F.h"
 #include "TCanvas.h"
 
-#include <unordered_map>
+
+
 
 namespace ActsAlignment {
 namespace detail {
@@ -60,7 +61,9 @@ TrackAlignmentState trackAlignmentState(
         globalTrackParamsCov,
     const std::unordered_map<const Surface*, size_t>& idxedAlignSurfaces,
     const AlignmentMask& alignMask,
+    const std::unordered_set<const Surface*>& selectedSurfaces,  // New parameter
     const ActsDynamicMatrix& misalignmentCovariance) {
+
   using CovMatrix = typename parameters_t::CovarianceMatrix;
 
   TrackAlignmentState alignState;
@@ -80,7 +83,9 @@ TrackAlignmentState trackAlignmentState(
     bool isAlignable = false;
     const auto surface = &ts.referenceSurface();
     auto it = idxedAlignSurfaces.find(surface);
-    if (it != idxedAlignSurfaces.end()) {
+
+    // can we find this surface in selectedSurfaces
+    if (it != idxedAlignSurfaces.end() && selectedSurfaces.count(surface) > 0) {
       isAlignable = true;
       alignState.alignedSurfaces[surface].first = it->second;
       nAlignSurfaces++;
@@ -151,6 +156,11 @@ TrackAlignmentState trackAlignmentState(
       alignState.alignmentToResidualDerivative.block(
           iMeasurement, iSurface * eAlignmentSize, measdim,
           eAlignmentSize) = -H * alignToBound;
+
+      // for the surfaces that are out of the picture, skip the calculations
+      if (selectedSurfaces.count(surface) == 0) {
+        continue;
+      }
     }
 
     for (unsigned int iColState = 0; iColState < measurementStates.size();
@@ -203,11 +213,9 @@ void resetAlignmentDerivative(Acts::AlignmentToBoundMatrix& alignToBound,
   }
 }
 
-void plotUnbiasedResiduals(const TrackAlignmentState& alignState, TH1F* histogram) {
-  ActsDynamicVector unbiasedResiduals = alignState.residual -
-      alignState.projectionMatrix * alignState.misalignmentParameters;
-  for (size_t i = 0; i < alignState.measurementDim; ++i) {
-    histogram->Fill(unbiasedResiduals(i));
-  }
-}
+// ...
+}  // namespace detail
+}  // namespace ActsAlignment
+
+
 

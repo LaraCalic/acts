@@ -1,16 +1,10 @@
-// This file is part of the Acts project.
-//
-// Copyright (C) 2016-2020 CERN for the benefit of the Acts project
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 #pragma once
+
 #include <cstdint>
 #include <functional>
 #include <iosfwd>
 #include <utility>
+#include <unordered_map>
 
 namespace Acts {
 
@@ -34,9 +28,11 @@ class GeometryIdentifier {
   /// Construct from an already encoded value.
   constexpr GeometryIdentifier(Value encoded)
       : m_value(encoded), m_misalignmentX(0.0), m_misalignmentY(0.0) {}
+
   /// Construct default GeometryIdentifier with all values set to zero.
   GeometryIdentifier()
       : m_value(0), m_misalignmentX(0.0), m_misalignmentY(0.0) {}
+
   GeometryIdentifier(GeometryIdentifier&&) = default;
   GeometryIdentifier(const GeometryIdentifier&) = default;
   ~GeometryIdentifier() = default;
@@ -48,53 +44,66 @@ class GeometryIdentifier {
 
   /// Return the volume identifier.
   constexpr Value volume() const { return getBits(kVolumeMask); }
+
   /// Return the boundary identifier.
   constexpr Value boundary() const { return getBits(kBoundaryMask); }
+
   /// Return the layer identifier.
   constexpr Value layer() const { return getBits(kLayerMask); }
+
   /// Return the approach identifier.
   constexpr Value approach() const { return getBits(kApproachMask); }
+
   /// Return the sensitive identifier.
   constexpr Value sensitive() const { return getBits(kSensitiveMask); }
-  /// Return the extra identifier
+
+  /// Return the extra identifier.
   /// Usage can be experiment-specific, like tagging which kind of detector a
-  /// surface object corresponds to, or which subsystem it belongs to
+  /// surface object corresponds to, or which subsystem it belongs to.
   constexpr Value extra() const { return getBits(kExtraMask); }
 
   /// Set the volume identifier.
   constexpr GeometryIdentifier& setVolume(Value volume) {
     return setBits(kVolumeMask, volume);
   }
+
   /// Set the boundary identifier.
   constexpr GeometryIdentifier& setBoundary(Value boundary) {
     return setBits(kBoundaryMask, boundary);
   }
+
   /// Set the layer identifier.
   constexpr GeometryIdentifier& setLayer(Value layer) {
     return setBits(kLayerMask, layer);
   }
+
   /// Set the approach identifier.
   constexpr GeometryIdentifier& setApproach(Value approach) {
     return setBits(kApproachMask, approach);
   }
+
   /// Set the sensitive identifier.
   constexpr GeometryIdentifier& setSensitive(Value sensitive) {
     return setBits(kSensitiveMask, sensitive);
   }
-  /// Set the extra identifier
+
+  /// Set the extra identifier.
   constexpr GeometryIdentifier& setExtra(Value extra) {
     return setBits(kExtraMask, extra);
   }
 
-  /// Return the misalignment in x- direction
+  /// Return the misalignment in the x-direction.
   double misalignmentX() const { return m_misalignmentX; }
-  /// Return the misalignment in y-direction (for the surface)
+
+  /// Return the misalignment in the y-direction (for the surface).
   double misalignmentY() const { return m_misalignmentY; }
-  /// Setting the misalignment in x-direction 
+
+  /// Set the misalignment in the x-direction.
   void setMisalignmentX(double misalignmentX) {
     m_misalignmentX = misalignmentX;
   }
-  /// Setting the misalignment in y - direction (for the surface)
+
+  /// Set the misalignment in the y-direction (for the surface).
   void setMisalignmentY(double misalignmentY) {
     m_misalignmentY = misalignmentY;
   }
@@ -121,27 +130,28 @@ class GeometryIdentifier {
     // WARNING undefined behaviour for mask == 0 which we should not have.
     return __builtin_ctzll(mask);
   }
+
   /// Extract the masked bits from the encoded value.
   constexpr Value getBits(Value mask) const {
     return (m_value & mask) >> extractShift(mask);
   }
+
   /// Set the masked bits to id in the encoded value.
   constexpr GeometryIdentifier& setBits(Value mask, Value id) {
     m_value = (m_value & ~mask) | ((id << extractShift(mask)) & mask);
-    // return *this here so we need to write less lines in the set... methods
+    // return *this here so we need to write fewer lines in the set... methods
     return *this;
   }
 
-  friend constexpr bool operator==(GeometryIdentifier lhs,
-                                   GeometryIdentifier rhs) {
+  friend constexpr bool operator==(GeometryIdentifier lhs, GeometryIdentifier rhs) {
     return lhs.m_value == rhs.m_value;
   }
-  friend constexpr bool operator!=(GeometryIdentifier lhs,
-                                   GeometryIdentifier rhs) {
+
+  friend constexpr bool operator!=(GeometryIdentifier lhs, GeometryIdentifier rhs) {
     return lhs.m_value != rhs.m_value;
   }
-  friend constexpr bool operator<(GeometryIdentifier lhs,
-                                  GeometryIdentifier rhs) {
+
+  friend constexpr bool operator<(GeometryIdentifier lhs, GeometryIdentifier rhs) {
     return lhs.m_value < rhs.m_value;
   }
 };
@@ -153,18 +163,9 @@ std::ostream& operator<<(std::ostream& os, GeometryIdentifier id);
 struct GeometryIdentifierHook {
   virtual ~GeometryIdentifierHook() = default;
   virtual Acts::GeometryIdentifier decorateIdentifier(
-      Acts::GeometryIdentifier identifier, const Acts::Surface& surface) const;
+      Acts::GeometryIdentifier identifier, [[maybe_unused]] const Acts::Surface& surface) const {
+    return identifier;
+  }
 };
 
 }  // namespace Acts
-
-// specialize std::hash so GeometryIdentifier can be used e.g. in an
-// unordered_map
-namespace std {
-template <>
-struct hash<Acts::GeometryIdentifier> {
-  auto operator()(Acts::GeometryIdentifier gid) const noexcept {
-    return std::hash<Acts::GeometryIdentifier::Value>()(gid.value());
-  }
-};
-}  // namespace std

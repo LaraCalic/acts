@@ -79,3 +79,5 @@ class AlignmentAlgorithm final : public IAlgorithm {
 };
 
 }  // namespace ActsExamples
+
+

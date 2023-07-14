@@ -8,531 +8,156 @@
 
 #pragma once
 
-#include "Acts/Definitions/Algebra.hpp"
-#include "Acts/Definitions/Alignment.hpp"
-#include "Acts/Definitions/Common.hpp"
-#include "Acts/Definitions/Tolerance.hpp"
-#include "Acts/Definitions/TrackParametrization.hpp"
-#include "Acts/Geometry/DetectorElementBase.hpp"
-#include "Acts/Geometry/GeometryContext.hpp"
-#include "Acts/Geometry/GeometryObject.hpp"
-#include "Acts/Geometry/Polyhedron.hpp"
-#include "Acts/Surfaces/BoundaryCheck.hpp"
-#include "Acts/Surfaces/SurfaceBounds.hpp"
-#include "Acts/Surfaces/SurfaceError.hpp"
-#include "Acts/Surfaces/detail/AlignmentHelper.hpp"
-#include "Acts/Utilities/BinnedArray.hpp"
-#include "Acts/Utilities/BinningType.hpp"
-#include "Acts/Utilities/Intersection.hpp"
-#include "Acts/Utilities/Result.hpp"
-
-#include <array>
-#include <cstddef>
-#include <memory>
-#include <ostream>
-#include <string>
-#include <tuple>
+#include <cstdint>
+#include <functional>
+#include <iosfwd>
 #include <utility>
+#include <unordered_map>
 
-namespace Acts {
-
-class DetectorElementBase;
-class SurfaceBounds;
-class ISurfaceMaterial;
-class Layer;
-class TrackingVolume;
-class IVisualization3D;
 class Surface;
 
-/// Typedef of the surface intersection
-using SurfaceIntersection = ObjectIntersection<Surface>;
+namespace Actss {
 
-/// @class Surface
+/// Identifier for geometry nodes within the geometry hierarchy.
 ///
-/// @brief Abstract Base Class for tracking surfaces
+/// An identifier can be split into the following components. They define
+/// a hierarchy of objects starting from the high-level volumes:
 ///
-/// The Surface class builds the core of the Acts Tracking Geometry.
-/// All other geometrical objects are either extending the surface or
-/// are built from it.
+/// - Volume
+/// - Boundary surfaces (for a volume)
+/// - Layers (confined within a volume)
+/// - Approach surfaces (for a layer)
+/// - Sensitive surfaces (confined to a layer, also called modules)
 ///
-/// Surfaces are either owned by Detector elements or the Tracking Geometry,
-/// in which case they are not copied within the data model objects.
-///
-class Surface : public virtual GeometryObject,
-                public std::enable_shared_from_this<Surface> {
+class NewGeometryIdentifier {
  public:
-  /// @enum SurfaceType
-  ///
-  /// This enumerator simplifies the persistency & calculations,
-  /// by saving a dynamic_cast, e.g. for persistency
-  enum SurfaceType {
-    Cone = 0,
-    Cylinder = 1,
-    Disc = 2,
-    Perigee = 3,
-    Plane = 4,
-    Straw = 5,
-    Curvilinear = 6,
-    Other = 7
-  };
+  using Value = uint64_t;
 
-  /// Helper strings for screen output
-  static std::array<std::string, SurfaceType::Other> s_surfaceTypeNames;
+  /// Construct from an already encoded value.
+  constexpr NewGeometryIdentifier(Value encoded)
+      : m_value(encoded), m_misalignmentX(0.0), m_misalignmentY(0.0) {}
+  /// Construct default GeometryIdentifier with all values set to zero.
+  NewGeometryIdentifier()
+      : m_value(0), m_misalignmentX(0.0), m_misalignmentY(0.0) {}
+  NewGeometryIdentifier(NewGeometryIdentifier&&) = default;
+  NewGeometryIdentifier(const NewGeometryIdentifier&) = default;
+  ~NewGeometryIdentifier() = default;
+  NewGeometryIdentifier& operator=(NewGeometryIdentifier&&) = default;
+  NewGeometryIdentifier& operator=(const NewGeometryIdentifier&) = default;
 
- protected:
-  /// Constructor with Transform3 as a shared object
-  ///
-  /// @param transform Transform3 positions the surface in 3D global space
-  /// @note also acts as default constructor
-  Surface(const Transform3& transform = Transform3::Identity());
+  /// Return the encoded value.
+  constexpr Value value() const { return m_value; }
 
-  /// Copy constructor
-  ///
-  /// @note copy construction invalidates the association
-  /// to detector element and layer
-  ///
-  /// @param other Source surface for copy.
-  Surface(const Surface& other);
+  /// Return the volume identifier.
+  constexpr Value volume() const { return getBits(kVolumeMask); }
+  /// Return the boundary identifier.
+  constexpr Value boundary() const { return getBits(kBoundaryMask); }
+  /// Return the layer identifier.
+  constexpr Value layer() const { return getBits(kLayerMask); }
+  /// Return the approach identifier.
+  constexpr Value approach() const { return getBits(kApproachMask); }
+  /// Return the sensitive identifier.
+  constexpr Value sensitive() const { return getBits(kSensitiveMask); }
+  /// Return the extra identifier
+  /// Usage can be experiment-specific, like tagging which kind of detector a
+  /// surface object corresponds to, or which subsystem it belongs to
+  constexpr Value extra() const { return getBits(kExtraMask); }
 
-  /// Constructor from DetectorElementBase: Element proxy
-  ///
-  /// @param detelement Detector element which is represented by this surface
-  Surface(const DetectorElementBase& detelement);
-
-  /// Copy constructor with optional shift
-  ///
-  /// @note copy construction invalidates the association
-  /// to detector element and layer
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param other Source surface for copy
-  /// @param shift Additional transform applied as: shift * transform
-  Surface(const GeometryContext& gctx, const Surface& other,
-          const Transform3& shift);
-
- public:
-  virtual ~Surface();
-
-  /// Factory for producing memory managed instances of Surface.
-  /// Will forward all parameters and will attempt to find a suitable
-  /// constructor.
-  template <class T, typename... Args>
-  static std::shared_ptr<T> makeShared(Args&&... args) {
-    return std::shared_ptr<T>(new T(std::forward<Args>(args)...));
+  /// Set the volume identifier.
+  constexpr NewGeometryIdentifier& setVolume(Value volume) {
+    return setBits(kVolumeMask, volume);
+  }
+  /// Set the boundary identifier.
+  constexpr NewGeometryIdentifier& setBoundary(Value boundary) {
+    return setBits(kBoundaryMask, boundary);
+  }
+  /// Set the layer identifier.
+  constexpr NewGeometryIdentifier& setLayer(Value layer) {
+    return setBits(kLayerMask, layer);
+  }
+  /// Set the approach identifier.
+  constexpr NewGeometryIdentifier& setApproach(Value approach) {
+    return setBits(kApproachMask, approach);
+  }
+  /// Set the sensitive identifier.
+  constexpr NewGeometryIdentifier& setSensitive(Value sensitive) {
+    return setBits(kSensitiveMask, sensitive);
+  }
+  /// Set the extra identifier
+  constexpr NewGeometryIdentifier& setExtra(Value extra) {
+    return setBits(kExtraMask, extra);
   }
 
-  /// Retrieve a @c std::shared_ptr for this surface (non-const version)
-  ///
-  /// @note Will error if this was not created through the @c makeShared factory
-  ///       since it needs access to the original reference. In C++14 this is
-  ///       undefined behavior (but most likely implemented as a @c bad_weak_ptr
-  ///       exception), in C++17 it is defined as that exception.
-  /// @note Only call this if you need shared ownership of this object.
-  ///
-  /// @return The shared pointer
-  std::shared_ptr<Surface> getSharedPtr();
-
-  /// Retrieve a @c std::shared_ptr for this surface (const version)
-  ///
-  /// @note Will error if this was not created through the @c makeShared factory
-  ///       since it needs access to the original reference. In C++14 this is
-  ///       undefined behavior, but most likely implemented as a @c bad_weak_ptr
-  ///       exception, in C++17 it is defined as that exception.
-  /// @note Only call this if you need shared ownership of this object.
-  ///
-  /// @return The shared pointer
-  std::shared_ptr<const Surface> getSharedPtr() const;
-
-  /// Assignment operator
-  /// @note copy construction invalidates the association
-  /// to detector element and layer
-  ///
-  /// @param other Source surface for the assignment
-  Surface& operator=(const Surface& other);
-
-  /// Comparison (equality) operator
-  /// The strategy for comparison is
-  /// (a) first pointer comparison
-  /// (b) then type comparison
-  /// (c) then bounds comparison
-  /// (d) then transform comparison
-  ///
-  /// @param other source surface for the comparison
-  virtual bool operator==(const Surface& other) const;
-
-  /// Comparison (non-equality) operator
-  ///
-  /// @param sf Source surface for the comparison
-  virtual bool operator!=(const Surface& sf) const;
-
- public:
-  /// Return method for the Surface type to avoid dynamic casts
-  virtual SurfaceType type() const = 0;
-
-  /// Return method for the surface Transform3 by reference
-  /// In case a detector element is associated the surface transform
-  /// is just forwarded to the detector element in order to keep the
-  /// (mis-)alignment cache cetrally handled
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  ///
-  /// @return the contextual transform
-  virtual const Transform3& transform(const GeometryContext& gctx) const;
-
-  /// Return method for the surface center by reference
-  /// @note the center is always recalculated in order to not keep a cache
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  ///
-  /// @return center position by value
-  virtual Vector3 center(const GeometryContext& gctx) const;
-
-  /// Return method for the normal vector of the surface
-  /// The normal vector can only be generally defined at a given local position
-  /// It requires a local position to be given (in general)
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param lposition is the local position where the normal vector is
-  /// constructed
-  ///
-  /// @return normal vector by value
-  virtual Vector3 normal(const GeometryContext& gctx,
-                         const Vector2& lposition) const = 0;
-
-  /// Return method for the normal vector of the surface
-  /// The normal vector can only be generally defined at a given local position
-  /// It requires a local position to be given (in general)
-  ///
-  /// @param position is the global position where the normal vector is
-  /// constructed
-  /// @param gctx The current geometry context object, e.g. alignment
-
-  ///
-  /// @return normal vector by value
-  virtual Vector3 normal(const GeometryContext& gctx,
-                         const Vector3& position) const;
-
-  /// Return method for the normal vector of the surface
-  ///
-  /// It will return a normal vector at the center() position
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  //
-  /// @return normal vector by value
-  virtual Vector3 normal(const GeometryContext& gctx) const {
-    return normal(gctx, center(gctx));
+  /// Return the misalignment in x- direction
+  double misalignmentX() const { return m_misalignmentX; }
+  /// Return the misalignment in y-direction (for the surface)
+  double misalignmentY() const { return m_misalignmentY; }
+  /// Setting the misalignment in x-direction 
+  void setMisalignmentX(double misalignmentX) {
+    m_misalignmentX = misalignmentX;
   }
-
-  /// Return method for SurfaceBounds
-  /// @return SurfaceBounds by reference
-  virtual const SurfaceBounds& bounds() const = 0;
-
-  /// Return method for the associated Detector Element
-  /// @return plain pointer to the DetectorElement, can be nullptr
-  const DetectorElementBase* associatedDetectorElement() const;
-
-  /// Return method for the associated Layer in which the surface is embedded
-  /// @return Layer by plain pointer, can be nullptr
-  const Layer* associatedLayer() const;
-
-  /// Set Associated Layer
-  /// Many surfaces can be associated to a Layer, but it might not be known yet
-  /// during construction of the layer, this can be set afterwards
-  ///
-  /// @param lay the assignment Layer by reference
-  void associateLayer(const Layer& lay);
-
-  /// Return method for the associated Material to this surface
-  /// @return SurfaceMaterial as plain pointer, can be nullptr
-  const ISurfaceMaterial* surfaceMaterial() const;
-
-  /// Return method for the shared pointer to the associated Material
-  /// @return SurfaceMaterial as shared_pointer, can be nullptr
-  const std::shared_ptr<const ISurfaceMaterial>& surfaceMaterialSharedPtr()
-      const;
-
-  /// Assign a detector element
-  ///
-  /// @param detelement Detector element which is represented by this surface
-  void assignDetectorElement(const DetectorElementBase& detelement);
-
-  /// Assign the surface material description
-  ///
-  /// The material is usually derived in a complicated way and loaded from
-  /// a framework given source. As various surfaces may share the same source
-  /// this is provided by a shared pointer
-  ///
-  /// @param material Material description associated to this surface
-  void assignSurfaceMaterial(std::shared_ptr<const ISurfaceMaterial> material);
-
-  /// The geometric onSurface method
-  ///
-  /// Geometrical check whether position is on Surface
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param position global position to be evaludated
-  /// @param direction global momentum direction (required for line-type surfaces)
-  /// @param bcheck BoundaryCheck directive for this onSurface check
-  ///
-  /// @return boolean indication if operation was successful
-  bool isOnSurface(const GeometryContext& gctx, const Vector3& position,
-                   const Vector3& direction,
-                   const BoundaryCheck& bcheck = true) const;
-
-  /// The insideBounds method for local positions
-  ///
-  /// @param lposition The local position to check
-  /// @param bcheck BoundaryCheck directive for this onSurface check
-  /// @return boolean indication if operation was successful
-  virtual bool insideBounds(const Vector2& lposition,
-                            const BoundaryCheck& bcheck = true) const;
-
-  /// Local to global transformation
-  /// Generalized local to global transformation for the surface types. Since
-  /// some surface types need the global momentum/direction to resolve sign
-  /// ambiguity this is also provided
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param lposition local 2D position in specialized surface frame
-  /// @param direction global 3D momentum direction
-  ///
-  /// @return The global position by value
-  virtual Vector3 localToGlobal(const GeometryContext& gctx,
-                                const Vector2& lposition,
-                                const Vector3& direction) const = 0;
-
-  /// Global to local transformation
-  /// Generalized global to local transformation for the surface types. Since
-  /// some surface types need the global momentum/direction to resolve sign
-  /// ambiguity this is also provided
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param position global 3D position - considered to be on surface but not
-  /// inside bounds (check is done)
-  /// @param direction global 3D momentum direction
-  /// @param tolerance optional tolerance within which a point is considered
-  /// valid on surface
-  ///
-  /// @return a Result<Vector2> which can be !ok() if the operation fails
-  virtual Result<Vector2> globalToLocal(
-      const GeometryContext& gctx, const Vector3& position,
-      const Vector3& direction,
-      double tolerance = s_onSurfaceTolerance) const = 0;
-
-  /// Return method for the reference frame
-  /// This is the frame in which the covariance matrix is defined (specialized
-  /// by all surfaces)
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param position global 3D position - considered to be on surface but not
-  /// inside bounds (check is done)
-  /// @param direction global 3D momentum direction (optionally ignored)
-  ///
-  /// @return RotationMatrix3 which defines the three axes of the measurement
-  /// frame
-  virtual Acts::RotationMatrix3 referenceFrame(const GeometryContext& gctx,
-                                               const Vector3& position,
-                                               const Vector3& direction) const;
-
-  /// Calculate the jacobian from local to global which the surface knows best,
-  /// hence the calculation is done here.
-  ///
-  /// @note In principle, the input could also be a free parameters
-  /// vector as it could be transformed to a bound parameters. But the transform
-  /// might fail in case the parameters is not on surface. To avoid the check
-  /// inside this function, it takes directly the bound parameters as input
-  /// (then the check might be done where this function is called).
-  ///
-  /// @todo this mixes track parameterisation and geometry
-  /// should move to :
-  /// "Acts/EventData/detail/coordinate_transformations.hpp"
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param boundParams is the bound parameters vector
-  ///
-  /// @return Jacobian from local to global
-  virtual BoundToFreeMatrix boundToFreeJacobian(
-      const GeometryContext& gctx, const BoundVector& boundParams) const;
-
-  /// Calculate the jacobian from global to local which the surface knows best,
-  /// hence the calculation is done here.
-  ///
-  /// @note It assumes the input free parameters is on surface, hence no
-  /// onSurface check is done inside this function.
-  ///
-  /// @todo this mixes track parameterisation and geometry
-  /// should move to :
-  /// "Acts/EventData/detail/coordinate_transformations.hpp"
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param parameters is the free parameters
-  ///
-  /// @return Jacobian from global to local
-  virtual FreeToBoundMatrix freeToBoundJacobian(
-      const GeometryContext& gctx, const FreeVector& parameters) const;
-
-  /// Calculate the derivative of path length at the geometry constraint or
-  /// point-of-closest-approach w.r.t. free parameters. The calculation is
-  /// identical for all surfaces where the reference frame does not depend on
-  /// the direction
-  ///
-  /// @todo this mixes track parameterisation and geometry
-  /// should move to :
-  /// "Acts/EventData/detail/coordinate_transformations.hpp"
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param parameters is the free parameters
-  ///
-  /// @return Derivative of path length w.r.t. free parameters
-  virtual FreeToPathMatrix freeToPathDerivative(
-      const GeometryContext& gctx, const FreeVector& parameters) const;
-
-  /// Calucation of the path correction for incident
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param position global 3D position - considered to be on surface but not
-  /// inside bounds (check is done)
-  /// @param direction global 3D momentum direction
-  ///
-  /// @return Path correction with respect to the nominal incident.
-  virtual double pathCorrection(const GeometryContext& gctx,
-                                const Vector3& position,
-                                const Vector3& direction) const = 0;
-
-  /// Straight line intersection schema from position/direction
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param position The position to start from
-  /// @param direction The direction at start
-  /// @param bcheck the Boundary Check
-  /// @param tolerance the tolerance used for the intersection
-  ///
-  /// @return SurfaceIntersection object (contains intersection & surface)
-  virtual SurfaceIntersection intersect(
-      const GeometryContext& gctx, const Vector3& position,
-      const Vector3& direction, const BoundaryCheck& bcheck = false,
-      ActsScalar tolerance = s_onSurfaceTolerance) const = 0;
-
-  /// Output Method for std::ostream, to be overloaded by child classes
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param sl is the ostream to be dumped into
-  virtual std::ostream& toStream(const GeometryContext& gctx,
-                                 std::ostream& sl) const;
-
-  /// Output into a std::string
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  std::string toString(const GeometryContext& gctx) const;
-
-  /// Return properly formatted class name
-  virtual std::string name() const = 0;
-
-  /// Return a Polyhedron for this object
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param lseg Number of segments along curved lines, if the lseg
-  /// is set to one, only the corners and the extrema are given,
-  /// otherwise it represents the number of segments for a full 2*M_PI
-  /// circle and is scaled to the relevant sector
-  ///
-  /// @note An internal surface transform can invalidate the extrema
-  /// in the transformed space
-  ///
-  /// @return A list of vertices and a face/facett description of it
-  virtual Polyhedron polyhedronRepresentation(const GeometryContext& gctx,
-                                              size_t lseg) const = 0;
-
-  /// The derivative of bound track parameters w.r.t. alignment
-  /// parameters of its reference surface (i.e. local frame origin in
-  /// global 3D Cartesian coordinates and its rotation represented with
-  /// extrinsic Euler angles)
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// change of alignment parameters
-  /// @param parameters is the free parameters
-  /// @param pathDerivative is the derivative of free parameters w.r.t. path
-  /// length
-  ///
-  /// @return Derivative of bound track parameters w.r.t. local frame
-  /// alignment parameters
-  AlignmentToBoundMatrix alignmentToBoundDerivative(
-      const GeometryContext& gctx, const FreeVector& parameters,
-      const FreeVector& pathDerivative) const;
-
-  /// Calculate the derivative of path length at the geometry constraint or
-  /// point-of-closest-approach w.r.t. alignment parameters of the surface (i.e.
-  /// local frame origin in global 3D Cartesian coordinates and its rotation
-  /// represented with extrinsic Euler angles)
-  ///
-  /// @note Re-implementation is needed for surface whose intersection with
-  /// track is not its local xy plane, e.g. LineSurface, CylinderSurface and
-  /// ConeSurface
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param parameters is the free parameters
-  ///
-  /// @return Derivative of path length w.r.t. the alignment parameters
-  virtual AlignmentToPathMatrix alignmentToPathDerivative(
-      const GeometryContext& gctx, const FreeVector& parameters) const;
-
-  /// Calculate the derivative of bound track parameters local position w.r.t.
-  /// position in local 3D Cartesian coordinates
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param position The position of the parameters in global
-  ///
-  /// @return Derivative of bound local position w.r.t. position in local 3D
-  /// cartesian coordinates
-  virtual ActsMatrix<2, 3> localCartesianToBoundLocalDerivative(
-      const GeometryContext& gctx, const Vector3& position) const = 0;
-
- protected:
-  /// Transform3 definition that positions
-  /// (translation, rotation) the surface in global space
-  Transform3 m_transform = Transform3::Identity();
-
-  /// Pointer to the a DetectorElementBase
-  const DetectorElementBase* m_associatedDetElement{nullptr};
-
-  /// The associated layer Layer - layer in which the Surface is be embedded,
-  /// nullptr if not associated
-  const Layer* m_associatedLayer{nullptr};
-
-  /// The associated TrackingVolume - tracking volume in case the surface is a
-  /// boundary surface, nullptr if not associated
-  const TrackingVolume* m_associatedTrackingVolume{nullptr};
-
-  /// Possibility to attach a material description
-  std::shared_ptr<const ISurfaceMaterial> m_surfaceMaterial;
+  /// Setting the misalignment in y - direction (for the surface)
+  void setMisalignmentY(double misalignmentY) {
+    m_misalignmentY = misalignmentY;
+  }
 
  private:
-  /// Calculate the derivative of bound track parameters w.r.t.
-  /// alignment parameters of its reference surface (i.e. origin in global 3D
-  /// Cartesian coordinates and its rotation represented with extrinsic Euler
-  /// angles) without any path correction
-  ///
-  /// @note This function should be used together with alignment to path
-  /// derivative to get the full alignment to bound derivatives
-  ///
-  /// @param gctx The current geometry context object, e.g. alignment
-  /// @param parameters is the free parameters
-  ///
-  /// @return Derivative of bound track parameters w.r.t. local frame alignment
-  /// parameters without path correction
-  AlignmentToBoundMatrix alignmentToBoundDerivativeWithoutCorrection(
-      const GeometryContext& gctx, const FreeVector& parameters) const;
+  // clang-format off
+  static constexpr Value kVolumeMask    = 0xff00000000000000; // (2^8)-1 = 255 volumes
+  static constexpr Value kBoundaryMask  = 0x00ff000000000000; // (2^8)-1 = 255 boundaries
+  static constexpr Value kLayerMask     = 0x0000fff000000000; // (2^12)-1 = 4095 layers
+  static constexpr Value kApproachMask  = 0x0000000ff0000000; // (2^8)-1 = 255 approach surfaces
+  static constexpr Value kSensitiveMask = 0x000000000fffff00; // (2^20)-1 = 1048575 sensitive surfaces
+  static constexpr Value kExtraMask     = 0x00000000000000ff; // (2^8)-1 = 255 extra values
+  // clang-format on
+
+  Value m_value = 0;
+  double m_misalignmentX = 0.0;
+  double m_misalignmentY = 0.0;
+
+  /// Extract the bit shift necessary to access the masked values.
+  static constexpr int extractShift(Value mask) {
+    // use compiler builtin to extract the number of trailing bits from the
+    // mask. the builtin should be available on all supported compilers.
+    // need unsigned long long version (...ll) to ensure uint64_t compatibility.
+    // WARNING undefined behaviour for mask == 0 which we should not have.
+    return __builtin_ctzll(mask);
+  }
+  /// Extract the masked bits from the encoded value.
+  constexpr Value getBits(Value mask) const {
+    return (m_value & mask) >> extractShift(mask);
+  }
+  /// Set the masked bits to id in the encoded value.
+  constexpr NewGeometryIdentifier& setBits(Value mask, Value id) {
+    m_value = (m_value & ~mask) | ((id << extractShift(mask)) & mask);
+    // return *this here so we need to write fewer lines in the set... methods
+    return *this;
+  }
+
+  friend constexpr bool operator==(NewGeometryIdentifier lhs,
+                                   NewGeometryIdentifier rhs) {
+    return lhs.m_value == rhs.m_value;
+  }
+  friend constexpr bool operator!=(NewGeometryIdentifier lhs,
+                                   NewGeometryIdentifier rhs) {
+    return lhs.m_value != rhs.m_value;
+  }
+  friend constexpr bool operator<(NewGeometryIdentifier lhs,
+                                  NewGeometryIdentifier rhs) {
+    return lhs.m_value < rhs.m_value;
+  }
+  friend constexpr bool operator<=(NewGeometryIdentifier lhs,
+                                   NewGeometryIdentifier rhs) {
+    return lhs.m_value <= rhs.m_value;
+  }
+  friend constexpr bool operator>(NewGeometryIdentifier lhs,
+                                  NewGeometryIdentifier rhs) {
+    return lhs.m_value > rhs.m_value;
+  }
+  friend constexpr bool operator>=(NewGeometryIdentifier lhs,
+                                   NewGeometryIdentifier rhs) {
+    return lhs.m_value >= rhs.m_value;
+  }
 };
 
-/// Print surface information to the provided stream. Internally invokes the
-/// `surface.toStream(...)`-method. This can be easily used e.g. like `std::cout
-/// << std::tie(surface, geometryContext);`
-inline std::ostream& operator<<(
-    std::ostream& os,
-    const std::tuple<const Surface&, const GeometryContext&>& tup) {
-  const auto [surface, gctx] = tup;
-  surface.toStream(gctx, os);
-  return os;
-}
-
-}  // namespace Acts
+}  // namespace Actss

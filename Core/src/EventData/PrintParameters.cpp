@@ -19,6 +19,8 @@
 
 namespace {
 
+using Actss::Surface;
+
 constexpr std::array<const char*, Acts::eBoundSize> makeBoundNames() {
   std::array<const char*, Acts::eBoundSize> names = {nullptr};
   // must be set by index since the order is user-configurable

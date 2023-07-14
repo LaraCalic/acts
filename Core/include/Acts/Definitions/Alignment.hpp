@@ -6,12 +6,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //Core/include/Acts/Definitions/Alignment.hpp
+
 #pragma once
 
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Definitions/TrackParametrization.hpp"
-
+#include "Acts/Surfaces/Surface.hpp"
 #include <vector>
+#include <unordered_set>
 
 namespace Acts {
 
@@ -42,7 +44,7 @@ using AlignmentToPositionMatrix = ActsMatrix<3, eAlignmentSize>;
 using AlignmentToBoundMatrix = ActsMatrix<eBoundSize, eAlignmentSize>;
 using AlignmentToPathMatrix = ActsMatrix<1, eAlignmentSize>;
 
-// for each individual sensor and its parameter, we have a structure 
+// Structure to hold misalignment parameters for an individual sensor
 struct MisalignmentParameters {
   double centerShiftX;
   double centerShiftY;
@@ -52,19 +54,38 @@ struct MisalignmentParameters {
   double rotationZ;
 };
 
-// class specific for the misalignment
+// class to store misalignment parameters (multiple sensors)
 class SensorMisalignments {
 public:
   explicit SensorMisalignments(size_t numSensors)
       : misalignments(numSensors, MisalignmentParameters{}) {}
 
-  //misalignment parameters
   MisalignmentParameters& getMisalignment(size_t sensorIndex) {
     return misalignments[sensorIndex];
   }
 
 private:
   std::vector<MisalignmentParameters> misalignments;
+};
+
+// new class: this class will handle selective misalignment
+class SuperstructureMisalignments {
+public:
+  void addSuperstructure(const Surface& surface) {
+    selectedSuperstructures.insert(&surface);
+  }
+
+  void removeSuperstructure(const Surface& surface) {
+    selectedSuperstructures.erase(&surface);
+  }
+
+  bool isSuperstructureSelected(const Surface& surface) const {
+    return selectedSuperstructures.count(&surface) > 0;
+  }
+
+private:
+  std::unordered_set<const Surface*> selectedSuperstructures;
+
 };
 
 }  // namespace Acts

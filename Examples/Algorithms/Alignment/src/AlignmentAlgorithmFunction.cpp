@@ -6,6 +6,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+
+
 #include "Acts/Definitions/TrackParametrization.hpp"
 #include "Acts/Geometry/GeometryIdentifier.hpp"
 #include "Acts/Propagator/EigenStepper.hpp"
@@ -18,8 +20,6 @@
 #include "ActsExamples/Alignment/AlignmentAlgorithm.hpp"
 #include "ActsExamples/MagneticField/MagneticField.hpp"
 
-
-//Examples/Algorithms/Alignment/src/AlignmentAlgorithmFunction.cpp
 namespace {
 
 using Updater = Acts::GainMatrixUpdater;
@@ -39,13 +39,14 @@ struct AlignmentFunctionImpl : public ActsExamples::AlignmentAlgorithm::Alignmen
       const ActsExamples::TrackParametersContainer& initialParameters,
       const ActsAlignment::AlignmentOptions<ActsExamples::AlignmentAlgorithm::TrackFitterOptions>& options,
       const SensorMisalignments& sensorMisalignments) const override {
-    //  misalignment to the elements
+    // Apply misalignment to the detector elements
     align.applyMisalignments(sensorMisalignments);
 
     // Run the alignment algorithm
     return align.align(sourceLinks, initialParameters, options);
-  };
+  }
 };
+
 }  // namespace
 
 std::shared_ptr<ActsExamples::AlignmentAlgorithm::AlignmentFunction>
@@ -62,6 +63,8 @@ ActsExamples::AlignmentAlgorithm::makeAlignmentFunction(
   Fitter trackFitter(std::move(propagator));
   Alignment alignment(std::move(trackFitter));
 
-  // Build the alignment functions. Owns the alignment object.
-  return std::make_shared<AlignmentFunctionImpl>(std::move(alignment));
+  // Build the alignment function. Owns the alignment object.
+  auto alignmentFunction = std::make_shared<AlignmentFunctionImpl>(std::move(alignment));
+
+  return alignmentFunction;
 }

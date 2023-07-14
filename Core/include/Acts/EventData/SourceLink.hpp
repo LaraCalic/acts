@@ -8,18 +8,20 @@
 
 #pragma once
 
-#include "Acts/Geometry/GeometryIdentifier.hpp"
 #include "Acts/Utilities/Any.hpp"
 #include "Acts/Utilities/TypeTraits.hpp"
+#include "Acts/Surfaces/Surface.hpp"
 
 #include <cassert>
 #include <iostream>
 #include <type_traits>
 #include <utility>
 
+using namespace Actss;
 namespace Acts {
 
 namespace detail_sl {
+  
 template <typename T>
 using geometry_id_t = decltype(std::declval<T>().geometryId());
 }  // namespace detail_sl
@@ -30,7 +32,7 @@ class SourceLink final {
  public:
   /// Getter for the geometry identifier
   /// @return The GeometryIdentifier
-  constexpr GeometryIdentifier geometryId() const { return m_geometryId; }
+  constexpr NewGeometryIdentifier geometryId() const { return m_geometryId; }
 
   SourceLink(const SourceLink& other) = default;
   SourceLink(SourceLink&& other) = default;
@@ -43,7 +45,7 @@ class SourceLink final {
   /// @param upstream The upstream source link to store
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, SourceLink>>>
-  explicit SourceLink(GeometryIdentifier id, T&& upstream)
+  explicit SourceLink(NewGeometryIdentifier id, T&& upstream)
       : m_geometryId{id}, m_upstream{std::move(upstream)} {
     static_assert(!std::is_same_v<std::decay_t<T>, SourceLink>,
                   "Cannot wrap SourceLink in SourceLink");
@@ -58,7 +60,7 @@ class SourceLink final {
                             !std::is_same_v<std::decay_t<T>, SourceLink>>>
   explicit SourceLink(T&& upstream) : m_geometryId{upstream.geometryId()} {
     static_assert(
-        std::is_same_v<detail_sl::geometry_id_t<T>, GeometryIdentifier>,
+        std::is_same_v<detail_sl::geometry_id_t<T>, NewGeometryIdentifier>,
         "geometryId method does not return a geometry id type");
 
     static_assert(!std::is_same_v<std::decay_t<T>, SourceLink>,
@@ -88,7 +90,7 @@ class SourceLink final {
   }
 
  private:
-  GeometryIdentifier m_geometryId{};
+  NewGeometryIdentifier m_geometryId{};
   any_type m_upstream{};
 };
 
