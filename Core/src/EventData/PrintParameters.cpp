@@ -19,7 +19,7 @@
 
 namespace {
 
-using Actss::Surface;
+using Acts::Surface;
 
 constexpr std::array<const char*, Acts::eBoundSize> makeBoundNames() {
   std::array<const char*, Acts::eBoundSize> names = {nullptr};

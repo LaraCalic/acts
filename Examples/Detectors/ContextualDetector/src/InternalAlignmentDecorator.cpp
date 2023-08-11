@@ -14,89 +14,103 @@
 #include "ActsExamples/Framework/RandomNumbers.hpp"
 #include <algorithm> // For std::find
 
-// acts/Examples/Detectors/ContextualDetector/src/InternalAlignmentDecorator.cpp
+namespace ActsExamples::Contextual {
 
-ActsExamples::ProcessCode
-ActsExamples::Contextual::InternalAlignmentDecorator::decorate(
-    AlgorithmContext& context) {
-  // We need to lock the Decorator
-  std::lock_guard<std::mutex> alignmentLock(m_alignmentMutex);
+InternalAlignmentDecorator::InternalAlignmentDecorator(
+    const Config& cfg, std::unique_ptr<const Acts::Logger> logger)
+    : m_cfg(cfg), m_logger(std::move(logger)) {}
 
-  // In which iov batch are we?
-  unsigned int iov = context.eventNumber / m_cfg.iovSize;
+ProcessCode InternalAlignmentDecorator::decorate(AlgorithmContext& context) {
+    // We need to lock the Decorator
+    std::lock_guard<std::mutex> alignmentLock(m_alignmentMutex);
 
-  ACTS_VERBOSE("IOV handling in thread " << std::this_thread::get_id() << ".");
-  ACTS_VERBOSE("IOV resolved to " << iov << " - from event "
-                                  << context.eventNumber << ".");
+    // In which iov batch are we?
+    unsigned int iov = context.eventNumber / m_cfg.iovSize;
 
-  m_eventsSeen++;
+    ACTS_VERBOSE("IOV handling in thread " << std::this_thread::get_id() << ".");
+    ACTS_VERBOSE("IOV resolved to " << iov << " - from event "
+                                      << context.eventNumber << ".");
 
-  context.geoContext = InternallyAlignedDetectorElement::ContextType{iov};
+    m_eventsSeen++;
 
-  if (m_cfg.randomNumberSvc != nullptr) {
-    if (auto it = m_activeIovs.find(iov); it != m_activeIovs.end()) {
-      // Iov is already present, update last accessed
-      it->second.lastAccessed = m_eventsSeen;
-    } else {
-      // Iov is not present yet, create it
+    context.geoContext = InternallyAlignedDetectorElement::ContextType{iov};
 
-      m_activeIovs.emplace(iov, IovStatus{m_eventsSeen});
+    if (m_cfg.randomNumberSvc != nullptr) {
+        if (auto it = m_activeIovs.find(iov); it != m_activeIovs.end()) {
+            // Iov is already present, update last accessed
+            it->second.lastAccessed = m_eventsSeen;
+        } else {
+            // Iov is not present yet, create it
 
-      ACTS_VERBOSE("New IOV " << iov << " detected at event "
-                              << context.eventNumber
-                              << ", emulate new alignment.");
+            m_activeIovs.emplace(iov, IovStatus{m_eventsSeen});
 
-      //algorithm local random number generator
-      RandomEngine rng = m_cfg.randomNumberSvc->spawnGenerator(context);
+            ACTS_VERBOSE("New IOV " << iov << " detected at event "
+                                    << context.eventNumber
+                                    << ", emulate new alignment.");
 
-      for (auto& lstore : m_cfg.detectorStore) {
-        for (auto& ldet : lstore) {
-          // if the current superstructure in the list of selected ones?
-          if (std::find(m_cfg.selectedSuperstructures.begin(), m_cfg.selectedSuperstructures.end(), ldet->superstructureId) != m_cfg.selectedSuperstructures.end()) {
-            // get the nominal transform
-            Acts::Transform3 tForm =
-                ldet->nominalTransform(context.geoContext);  // copy
-            // create a new transform
-            applyTransform(tForm, m_cfg, rng, iov);
+            // Create an algorithm local random number generator
+            RandomEngine rng = m_cfg.randomNumberSvc->spawnGenerator(context);
 
-            // for each, individual sensor, generate the correleted misalignment 
-            auto misalignments = generateCorrelatedMisalignments(
-                m_cfg.sigmaInPlane, m_cfg.sigmaOutPlane, m_cfg.sigmaInRot,
-                m_cfg.sigmaOutRot, rng);
-
-            // applying misalignments to the transform
-            applyMisalignment(tForm, std::get<0>(misalignments),
-                              std::get<1>(misalignments),
-                              std::get<2>(misalignments),
-                              std::get<3>(misalignments));
-
-            // puting back transformed alignment back into the store
-            ldet->addAlignedTransform(tForm, iov);
-          }
+            for (auto& lstore : m_cfg.detectorStore) {
+                for (auto& ldet : lstore) {
+                    // get the nominal transform
+                    Acts::Transform3 tForm =
+                        ldet->nominalTransform(context.geoContext);  // copy
+                    // create a new transform
+                    if (isMisalignedSuperstructure(tForm, rng)) {
+                        Acts::Vector3 translation = generateMisalignmentTranslation(rng);
+                        applyMisalignmentToSuperstructure(ldet->surface(), translation);
+                    }
+                }
+            }
         }
-      }
     }
-  }
 
-  // Garbage collection
-  if (m_cfg.doGarbageCollection) {
-    for (auto it = m_activeIovs.begin(); it != m_activeIovs.end();) {
-      unsigned int this_iov = it->first;
-      auto& status = it->second;
-      if (m_eventsSeen - status.lastAccessed > m_cfg.flushSize) {
-        ACTS_DEBUG("IOV " << this_iov << " has not been accessed in the last "
-                          << m_cfg.flushSize << " events, clearing");
-        it = m_activeIovs.erase(it);
-        for (auto& lstore : m_cfg.detectorStore) {
-          for (auto& ldet : lstore) {
-            ldet->clearAlignedTransform(this_iov);
-          }
+    // Garbage collection
+    if (m_cfg.doGarbageCollection) {
+        for (auto it = m_activeIovs.begin(); it != m_activeIovs.end();) {
+            unsigned int this_iov = it->first;
+            auto& status = it->second;
+            if (m_eventsSeen - status.lastAccessed > m_cfg.flushSize) {
+                ACTS_DEBUG("IOV " << this_iov << " has not been accessed in the last "
+                                << m_cfg.flushSize << " events, clearing");
+                it = m_activeIovs.erase(it);
+                for (auto& lstore : m_cfg.detectorStore) {
+                    for (auto& ldet : lstore) {
+                        ldet->clearAlignedTransform(this_iov);
+                    }
+                }
+            } else {
+                it++;
+            }
         }
-      } else {
-        it++;
-      }
     }
-  }
 
-  return ProcessCode::SUCCESS;
+    return ProcessCode::SUCCESS;
 }
+
+bool InternalAlignmentDecorator::isMisalignedSuperstructure(const Acts::Transform3& tForm, RandomEngine& rng) const {
+    // Determine whether the superstructure should be misaligned
+    // based on tForm and random probability
+    // For example, misalign with a 20% probability
+    return rng() < 0.2; 
+}
+
+Acts::Vector3 InternalAlignmentDecorator::generateMisalignmentTranslation(RandomEngine& rng) const {
+    // Generate the misalignment translation vector
+    // Generate random translations in the range of -0.1 to 0.1
+    double deltaX = (rng() - 0.5) * 0.2; // Adjust range as needed
+    double deltaY = (rng() - 0.5) * 0.2;
+    double deltaZ = (rng() - 0.5) * 0.2;
+    return Acts::Vector3{deltaX, deltaY, deltaZ};
+}
+
+void InternalAlignmentDecorator::applyMisalignmentToSuperstructure(const Acts::Surface* surface, const Acts::Vector3& translation) const {
+    // Apply the misalignment translation to the superstructure's transformation
+    if (surface) {
+        Acts::Transform3& tForm = surface->transform();
+        tForm.translation() += translation;
+    }
+}
+
+} // namespace ActsExamples::Contextual

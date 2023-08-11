@@ -5,7 +5,7 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
-// acts/Alignment/include/ActsAlignment/Kernel/AlignmentError.hpp
+
 
 
 #pragma once
@@ -13,6 +13,17 @@
 #include <iostream>
 #include <string>        // for string printing
 #include <system_error>  // bring in std::error_code et al
+
+inline std::error_code make_error_code(ActsAlignment::AlignmentError e) {
+  return {static_cast<int>(e), ActsAlignment::AlignmentErrorCategory()};
+}
+}  // namespace ActsAlignment
+
+namespace std {
+// register with STL
+template <>
+struct is_error_code_enum<ActsAlignment::AlignmentError> : std::true_type {};
+}  // namespace std
 
 namespace ActsAlignment {
 // This is the custom error code enum
@@ -58,7 +69,6 @@ struct MisalignmentParameters {
   Acts::Translation3 translation;
   Acts::RotationMatrix3 rotation;
 };
-
 
 
 template <typename fitter_t>

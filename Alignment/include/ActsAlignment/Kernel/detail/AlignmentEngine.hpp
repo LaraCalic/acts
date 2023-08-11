@@ -21,7 +21,55 @@
 #include "TCanvas.h"
 
 
+#include <unordered_map>
 
+namespace ActsAlignment {
+namespace detail {
+
+using namespace Acts;
+///
+///@brief struct to store info needed for track-based alignment
+///
+
+struct TrackAlignmentState {
+  // The dimension of measurements
+  size_t measurementDim = 0;
+
+  // The dimension of track parameters
+  size_t trackParametersDim = 0;
+
+  // The contributed alignment degree of freedom
+  size_t alignmentDof = 0;
+
+  // The measurements covariance
+  ActsDynamicMatrix measurementCovariance;
+
+  // The track parameters covariance
+  ActsDynamicMatrix trackParametersCovariance;
+
+  // The projection matrix
+  ActsDynamicMatrix projectionMatrix;
+
+  // The residual
+  ActsDynamicVector residual;
+
+  // The covariance of residual
+  ActsDynamicMatrix residualCovariance;
+
+  // The chi2
+  double chi2 = 0;
+
+  // The derivative of residual w.r.t. alignment parameters
+  ActsDynamicMatrix alignmentToResidualDerivative;
+
+  // The derivative of chi2 w.r.t. alignment parameters
+  ActsDynamicVector alignmentToChi2Derivative;
+
+  // The second derivative of chi2 w.r.t. alignment parameters
+  ActsDynamicMatrix alignmentToChi2SecondDerivative;
+
+  // The alignable surfaces on the track and their indices in both the global
+  // alignable surfaces pool and those relevant with this track
 
 namespace ActsAlignment {
 namespace detail {

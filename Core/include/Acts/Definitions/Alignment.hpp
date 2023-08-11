@@ -5,7 +5,7 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
-//Core/include/Acts/Definitions/Alignment.hpp
+
 
 #pragma once
 
@@ -84,7 +84,7 @@ public:
   }
 
 private:
-  std::unordered_set<const Surface*> selectedSuperstructures;
+  std::unordered_set<const Surface&> selectedSuperstructures;
 
 };
 

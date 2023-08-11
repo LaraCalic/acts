@@ -17,7 +17,7 @@
 #include <type_traits>
 #include <utility>
 
-using namespace Actss;
+using namespace Acts;
 namespace Acts {
 
 namespace detail_sl {

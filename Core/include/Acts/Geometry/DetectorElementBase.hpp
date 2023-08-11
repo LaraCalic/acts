@@ -8,6 +8,19 @@
 
 #pragma once
 
+/// This is the plugin mechanism to exchange the entire DetectorElementBase
+///
+/// By defining ACTS_DETECTOR_ELEMENT_BASE_REPLACEMENT pre-compile time the
+/// detector element entire detector element can be exchanged with a file
+/// provided by the client.
+///
+/// The API has to be present though
+#ifdef ACTS_DETECTOR_ELEMENT_BASE_REPLACEMENT
+#include ACTS_DETECTOR_ELEMENT_BASE_REPLACEMENT
+#else
+#include "detail/DefaultDetectorElementBase.hpp"
+#endif
+
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
 #include "Acts/Geometry/GeometryIdentifier.hpp"  
@@ -18,14 +31,14 @@
 #include <vector>
 
 // Specialize std::hash for GeometryIdentifier
-namespace std {
-template <>
-struct hash<Acts::GeometryIdentifier> {
-  size_t operator()(const Acts::GeometryIdentifier& id) const {
-    return std::hash<Acts::GeometryIdentifier::Value>()(id.value());
-  }
-};
-}  // namespace std
+//namespace std {
+//template <>
+//struct hash<Acts::GeometryIdentifier> {
+//  size_t operator()(const Acts::GeometryIdentifier& id) const {
+ //   return std::hash<Acts::GeometryIdentifier::Value>()(id.value());
+//  }
+//};
+//}  // namespace std
 
 namespace Acts {
 
